@@ -23,16 +23,20 @@ def process_input():
         user_text = st.session_state["user_input"].strip()
         with st.session_state["thinking_spinner"], st.spinner("Thinking..."):
             try:
-                agent_text = st.session_state["assistant"].ask(
+                # ask() 现在返回 (回答, 检索到的原文片段)
+                answer, sources = st.session_state["assistant"].ask(
                     user_text,
                     k=st.session_state["retrieval_k"],
                     score_threshold=st.session_state["retrieval_threshold"],
                 )
             except ValueError as e:
-                agent_text = str(e)
+                answer, sources = str(e), []
 
         st.session_state["messages"].append((user_text, True))
-        st.session_state["messages"].append((agent_text, False))
+        st.session_state["messages"].append((answer, False))
+
+        # 保存本次检索到的原文，供界面显示
+        st.session_state["last_sources"] = sources
 
 
 def read_and_save_file():
@@ -40,6 +44,7 @@ def read_and_save_file():
     st.session_state["assistant"].clear()
     st.session_state["messages"] = []
     st.session_state["user_input"] = ""
+    st.session_state["last_sources"] = []
 
     for file in st.session_state["file_uploader"]:
         with tempfile.NamedTemporaryFile(delete=False) as tf:
@@ -62,6 +67,7 @@ def page():
     if len(st.session_state) == 0:
         st.session_state["messages"] = []
         st.session_state["assistant"] = ChatPDF()
+        st.session_state["last_sources"] = []
 
     st.header("RAG with Local DeepSeek R1")
 
@@ -90,9 +96,18 @@ def page():
     display_messages()
     st.text_input("Message", key="user_input", on_change=process_input)
 
+    # 检索溯源：显示最近一次回答检索到的原文片段
+    if st.session_state.get("last_sources"):
+        with st.expander("查看检索到的原文片段"):
+            for i, src in enumerate(st.session_state["last_sources"], 1):
+                st.markdown(f"**片段 {i}**")
+                st.text(src[:500])
+                st.divider()
+
     # Clear chat
     if st.button("Clear Chat"):
         st.session_state["messages"] = []
+        st.session_state["last_sources"] = []
         st.session_state["assistant"].clear()
 
 
